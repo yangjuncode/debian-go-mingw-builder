@@ -1,5 +1,5 @@
-ARG go_version=1.21.13-1
-FROM ghcr.io/yangjuncode/go:${go_version}
+ARG go_version_build=1.21.13-1
+FROM ghcr.io/yangjuncode/go:${go_version_build}
 
 #ref from https://github.com/yangjuncode/flutter-android-go-builder
 LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder

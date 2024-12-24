@@ -1,13 +1,12 @@
-ARG go_version=1.21.13
+ARG go_version=1.22.10
 FROM golang:${go_version}-bullseye
 
-#ref from https://github.com/yangjuncode/flutter-android-go-builder
-LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder/1.21
+LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder/1.22
 
 USER root
 
 RUN set -o xtrace \
-   && apt-get clean \
+    && apt-get clean \
     && apt-get update \
     && apt-get -y --allow-unauthenticated install patch
 
@@ -18,4 +17,3 @@ RUN cd /usr/local/go \
     patch --verbose -p1 < "/usr/local/go/$patch_file"; \
     done \
     && rm -rf /usr/local/go/*.patch
-

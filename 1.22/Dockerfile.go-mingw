@@ -1,11 +1,12 @@
-FROM ghcr.io/yangjuncode/go:1.21.13
+ARG go_version_build=1.22.10-1
+FROM ghcr.io/yangjuncode/go:${go_version_build}
 
 #ref from https://github.com/yangjuncode/flutter-android-go-builder
 LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder
 
 USER root
 
-ARG cmake_version=3.31.1
+ARG cmake_version=3.31.3
 
 RUN set -o xtrace \
     && apt-get update \
