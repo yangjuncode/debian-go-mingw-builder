@@ -1,0 +1,23 @@
+Subject: [PATCH] code foramt
+---
+Index: src/runtime/os_windows.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/runtime/os_windows.go b/src/runtime/os_windows.go
+--- a/src/runtime/os_windows.go	(revision bb305a5cb6be9aace4699efe530387d455ba2f90)
++++ b/src/runtime/os_windows.go	(revision d18c7c5a7f5b23bfefff4a6973c66ed21a13b02a)
+@@ -154,9 +154,9 @@
+ 
+ var (
+ 	advapi32dll = [...]uint16{'a', 'd', 'v', 'a', 'p', 'i', '3', '2', '.', 'd', 'l', 'l', 0}
+-	ntdlldll            = [...]uint16{'n', 't', 'd', 'l', 'l', '.', 'd', 'l', 'l', 0}
+-	powrprofdll         = [...]uint16{'p', 'o', 'w', 'r', 'p', 'r', 'o', 'f', '.', 'd', 'l', 'l', 0}
+-	winmmdll            = [...]uint16{'w', 'i', 'n', 'm', 'm', '.', 'd', 'l', 'l', 0}
++	ntdlldll    = [...]uint16{'n', 't', 'd', 'l', 'l', '.', 'd', 'l', 'l', 0}
++	powrprofdll = [...]uint16{'p', 'o', 'w', 'r', 'p', 'r', 'o', 'f', '.', 'd', 'l', 'l', 0}
++	winmmdll    = [...]uint16{'w', 'i', 'n', 'm', 'm', '.', 'd', 'l', 'l', 0}
+ )
+ 
+ // Function to be called by windows CreateThread

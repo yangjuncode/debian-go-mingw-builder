@@ -1,0 +1,74 @@
+Subject: [PATCH] [release-branch.go1.23] cmd/compile/internal/importer: enable aliases
+---
+Index: src/cmd/compile/internal/importer/gcimporter_test.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/cmd/compile/internal/importer/gcimporter_test.go b/src/cmd/compile/internal/importer/gcimporter_test.go
+--- a/src/cmd/compile/internal/importer/gcimporter_test.go	(revision 194de8fbfaf4c3ed54e1a3c1b14fc67a830b8d95)
++++ b/src/cmd/compile/internal/importer/gcimporter_test.go	(revision 7d55f041391de91f87a14c4a355fa9fb8bc13b70)
+@@ -582,6 +582,23 @@
+ 	compileAndImportPkg(t, "issue25596")
+ }
+ 
++func TestIssue70394(t *testing.T) {
++	testenv.MustHaveGoBuild(t)
++
++	// This package only handles gc export data.
++	if runtime.Compiler != "gc" {
++		t.Skipf("gc-built packages not available (compiler = %s)", runtime.Compiler)
++	}
++
++	pkg := compileAndImportPkg(t, "alias")
++	obj := lookupObj(t, pkg.Scope(), "A")
++
++	typ := obj.Type()
++	if _, ok := typ.(*types2.Alias); !ok {
++		t.Fatalf("type of %s is %s, wanted an alias", obj, typ)
++	}
++}
++
+ func importPkg(t *testing.T, path, srcDir string) *types2.Package {
+ 	pkg, err := Import(make(map[string]*types2.Package), path, srcDir, nil)
+ 	if err != nil {
+Index: src/cmd/compile/internal/importer/testdata/alias.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/cmd/compile/internal/importer/testdata/alias.go b/src/cmd/compile/internal/importer/testdata/alias.go
+new file mode 100644
+--- /dev/null	(revision 7d55f041391de91f87a14c4a355fa9fb8bc13b70)
++++ b/src/cmd/compile/internal/importer/testdata/alias.go	(revision 7d55f041391de91f87a14c4a355fa9fb8bc13b70)
+@@ -0,0 +1,7 @@
++// Copyright 2024 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package testdata
++
++type A = int32
+Index: src/cmd/compile/internal/importer/ureader.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/cmd/compile/internal/importer/ureader.go b/src/cmd/compile/internal/importer/ureader.go
+--- a/src/cmd/compile/internal/importer/ureader.go	(revision 194de8fbfaf4c3ed54e1a3c1b14fc67a830b8d95)
++++ b/src/cmd/compile/internal/importer/ureader.go	(revision 7d55f041391de91f87a14c4a355fa9fb8bc13b70)
+@@ -29,11 +29,9 @@
+ 	pr := pkgReader{
+ 		PkgDecoder: input,
+ 
+-		ctxt:    ctxt,
+-		imports: imports,
+-		// Currently, the compiler panics when using Alias types.
+-		// TODO(gri) set to true once this is fixed (issue #66873)
+-		enableAlias: false,
++		ctxt:        ctxt,
++		imports:     imports,
++		enableAlias: true,
+ 
+ 		posBases: make([]*syntax.PosBase, input.NumElems(pkgbits.RelocPosBase)),
+ 		pkgs:     make([]*types2.Package, input.NumElems(pkgbits.RelocPkg)),
