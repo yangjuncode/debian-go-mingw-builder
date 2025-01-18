@@ -1,0 +1,83 @@
+Subject: [PATCH] [release-branch.go1.23] cmd/compile: fix write barrier coalescing
+---
+Index: src/cmd/compile/internal/ssa/writebarrier.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/cmd/compile/internal/ssa/writebarrier.go b/src/cmd/compile/internal/ssa/writebarrier.go
+--- a/src/cmd/compile/internal/ssa/writebarrier.go	(revision d04e3cbc9240e25de449dcae2ec33d03062f347b)
++++ b/src/cmd/compile/internal/ssa/writebarrier.go	(revision fa5190f00b6621649cb5eee39c02d2d0ac5cf26a)
+@@ -252,6 +252,7 @@
+ 		var start, end int
+ 		var nonPtrStores int
+ 		values := b.Values
++		hasMove := false
+ 	FindSeq:
+ 		for i := len(values) - 1; i >= 0; i-- {
+ 			w := values[i]
+@@ -263,6 +264,9 @@
+ 					end = i + 1
+ 				}
+ 				nonPtrStores = 0
++				if w.Op == OpMoveWB {
++					hasMove = true
++				}
+ 			case OpVarDef, OpVarLive:
+ 				continue
+ 			case OpStore:
+@@ -272,6 +276,17 @@
+ 				nonPtrStores++
+ 				if nonPtrStores > 2 {
+ 					break FindSeq
++				}
++				if hasMove {
++					// We need to ensure that this store happens
++					// before we issue a wbMove, as the wbMove might
++					// use the result of this store as its source.
++					// Even though this store is not write-barrier
++					// eligible, it might nevertheless be the store
++					// of a pointer to the stack, which is then the
++					// source of the move.
++					// See issue 71228.
++					break FindSeq
+ 				}
+ 			default:
+ 				if last == nil {
+Index: test/codegen/writebarrier.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/test/codegen/writebarrier.go b/test/codegen/writebarrier.go
+--- a/test/codegen/writebarrier.go	(revision d04e3cbc9240e25de449dcae2ec33d03062f347b)
++++ b/test/codegen/writebarrier.go	(revision fa5190f00b6621649cb5eee39c02d2d0ac5cf26a)
+@@ -53,3 +53,28 @@
+ 	// arm64:-`.*runtime[.]gcWriteBarrier`
+ 	p[3] = d
+ }
++
++type S struct {
++	a, b string
++	c    *int
++}
++
++var g1, g2 *int
++
++func issue71228(dst *S, ptr *int) {
++	// Make sure that the non-write-barrier write.
++	// "sp.c = ptr" happens before the large write
++	// barrier "*dst = *sp". We approximate testing
++	// that by ensuring that two global variable write
++	// barriers aren't combined.
++	_ = *dst
++	var s S
++	sp := &s
++	//amd64:`.*runtime[.]gcWriteBarrier1`
++	g1 = nil
++	sp.c = ptr // outside of any write barrier
++	//amd64:`.*runtime[.]gcWriteBarrier1`
++	g2 = nil
++	//amd64:`.*runtime[.]wbMove`
++	*dst = *sp
++}

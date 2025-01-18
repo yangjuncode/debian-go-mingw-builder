@@ -1,0 +1,52 @@
+Subject: [PATCH] add rtlGetNtVersionNumbers
+---
+Index: src/syscall/syscall_windows.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/syscall/syscall_windows.go b/src/syscall/syscall_windows.go
+--- a/src/syscall/syscall_windows.go	(revision 59c5b4376b370f9bf2f58bf1771ff11b92bee097)
++++ b/src/syscall/syscall_windows.go	(revision 171bb81e4e9455f409fb60aa878c234a0136fbaf)
+@@ -233,6 +233,7 @@
+ //sys	FreeLibrary(handle Handle) (err error)
+ //sys	GetProcAddress(module Handle, procname string) (proc uintptr, err error)
+ //sys	GetVersion() (ver uint32, err error)
++//sys	rtlGetNtVersionNumbers(majorVersion *uint32, minorVersion *uint32, buildNumber *uint32) = ntdll.RtlGetNtVersionNumbers
+ //sys	formatMessage(flags uint32, msgsrc uintptr, msgid uint32, langid uint32, buf []uint16, args *byte) (n uint32, err error) = FormatMessageW
+ //sys	ExitProcess(exitcode uint32)
+ //sys	CreateFile(name *uint16, access uint32, mode uint32, sa *SecurityAttributes, createmode uint32, attrs uint32, templatefile int32) (handle Handle, err error) [failretval==InvalidHandle] = CreateFileW
+Index: src/syscall/zsyscall_windows.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/syscall/zsyscall_windows.go b/src/syscall/zsyscall_windows.go
+--- a/src/syscall/zsyscall_windows.go	(revision 59c5b4376b370f9bf2f58bf1771ff11b92bee097)
++++ b/src/syscall/zsyscall_windows.go	(revision 171bb81e4e9455f409fb60aa878c234a0136fbaf)
+@@ -47,6 +47,7 @@
+ 	modshell32  = NewLazyDLL(sysdll.Add("shell32.dll"))
+ 	moduserenv  = NewLazyDLL(sysdll.Add("userenv.dll"))
+ 	modws2_32   = NewLazyDLL(sysdll.Add("ws2_32.dll"))
++	modntdll    = NewLazyDLL(sysdll.Add("ntdll.dll"))
+ 
+ 	procConvertSidToStringSidW             = modadvapi32.NewProc("ConvertSidToStringSidW")
+ 	procConvertStringSidToSidW             = modadvapi32.NewProc("ConvertStringSidToSidW")
+@@ -195,6 +196,7 @@
+ 	procsetsockopt                         = modws2_32.NewProc("setsockopt")
+ 	procshutdown                           = modws2_32.NewProc("shutdown")
+ 	procsocket                             = modws2_32.NewProc("socket")
++	procRtlGetNtVersionNumbers			   = modntdll.NewProc("RtlGetNtVersionNumbers")
+ )
+ 
+ func ConvertSidToStringSid(sid *SID, stringSid **uint16) (err error) {
+@@ -1466,3 +1468,8 @@
+ 	}
+ 	return
+ }
++
++func rtlGetNtVersionNumbers(majorVersion *uint32, minorVersion *uint32, buildNumber *uint32) {
++	Syscall(procRtlGetNtVersionNumbers.Addr(), 3, uintptr(unsafe.Pointer(majorVersion)), uintptr(unsafe.Pointer(minorVersion)), uintptr(unsafe.Pointer(buildNumber)))
++	return
++}
+\ No newline at end of file
