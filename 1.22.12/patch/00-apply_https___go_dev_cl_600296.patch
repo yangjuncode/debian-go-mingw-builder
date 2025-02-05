@@ -1,0 +1,277 @@
+Subject: [PATCH] apply https://go.dev/cl/600296
+---
+Index: src/runtime/cgo/gcc_stack_unix.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/runtime/cgo/gcc_stack_unix.c b/src/runtime/cgo/gcc_stack_unix.c
+--- a/src/runtime/cgo/gcc_stack_unix.c	(revision 84e4797814312c687ac685a8b6dacc13b93e6392)
++++ b/src/runtime/cgo/gcc_stack_unix.c	(revision 3674096fb024ab94b6b0b443d681639d85a79033)
+@@ -21,7 +21,7 @@
+ 	// Needed before pthread_getattr_np, too, since before glibc 2.32
+ 	// it did not call pthread_attr_init in all cases (see #65625).
+ 	pthread_attr_init(&attr);
+-#if defined(__GLIBC__) || (defined(__sun) && !defined(__illumos__))
++#if defined(__GLIBC__) || defined(__BIONIC__) || (defined(__sun) && !defined(__illumos__))
+ 	// pthread_getattr_np is a GNU extension supported in glibc.
+ 	// Solaris is not glibc but does support pthread_getattr_np
+ 	// (and the fallback doesn't work...). Illumos does not.
+@@ -31,8 +31,11 @@
+ 	pthread_attr_get_np(pthread_self(), &attr);
+ 	pthread_attr_getstack(&attr, &addr, &size); // low address
+ #else
+-	pthread_attr_getstacksize(&attr, &size);
+-	addr = __builtin_frame_address(0) + 4096 - size;
++	// We don't know how to get the current stacks, leave it as
++	// 0 and the caller will use an estimate based on the current
++	// SP.
++	addr = 0;
++	size = 0;
+ #endif
+ 	pthread_attr_destroy(&attr);
+ 
+Index: src/runtime/cgocall.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/runtime/cgocall.go b/src/runtime/cgocall.go
+--- a/src/runtime/cgocall.go	(revision 84e4797814312c687ac685a8b6dacc13b93e6392)
++++ b/src/runtime/cgocall.go	(revision 3674096fb024ab94b6b0b443d681639d85a79033)
+@@ -215,34 +215,6 @@
+ func callbackUpdateSystemStack(mp *m, sp uintptr, signal bool) {
+ 	g0 := mp.g0
+ 
+-	inBound := sp > g0.stack.lo && sp <= g0.stack.hi
+-	if mp.ncgo > 0 && !inBound {
+-		// ncgo > 0 indicates that this M was in Go further up the stack
+-		// (it called C and is now receiving a callback).
+-		//
+-		// !inBound indicates that we were called with SP outside the
+-		// expected system stack bounds (C changed the stack out from
+-		// under us between the cgocall and cgocallback?).
+-		//
+-		// It is not safe for the C call to change the stack out from
+-		// under us, so throw.
+-
+-		// Note that this case isn't possible for signal == true, as
+-		// that is always passing a new M from needm.
+-
+-		// Stack is bogus, but reset the bounds anyway so we can print.
+-		hi := g0.stack.hi
+-		lo := g0.stack.lo
+-		g0.stack.hi = sp + 1024
+-		g0.stack.lo = sp - 32*1024
+-		g0.stackguard0 = g0.stack.lo + stackGuard
+-		g0.stackguard1 = g0.stackguard0
+-
+-		print("M ", mp.id, " procid ", mp.procid, " runtime: cgocallback with sp=", hex(sp), " out of bounds [", hex(lo), ", ", hex(hi), "]")
+-		print("\n")
+-		exit(2)
+-	}
+-
+ 	if !mp.isextra {
+ 		// We allocated the stack for standard Ms. Don't replace the
+ 		// stack bounds with estimated ones when we already initialized
+@@ -250,26 +222,36 @@
+ 		return
+ 	}
+ 
+-	// This M does not have Go further up the stack. However, it may have
+-	// previously called into Go, initializing the stack bounds. Between
+-	// that call returning and now the stack may have changed (perhaps the
+-	// C thread is running a coroutine library). We need to update the
+-	// stack bounds for this case.
++	inBound := sp > g0.stack.lo && sp <= g0.stack.hi
++	if inBound && mp.g0StackAccurate {
++		// This M has called into Go before and has the stack bounds
++		// initialized. We have the accurate stack bounds, and the SP
++		// is in bounds. We expect it continues to run within the same
++		// bounds.
++		return
++	}
++	// We don't have an accurate stack bounds (either it never calls
++	// into Go before, or we couldn't get the accurate bounds), or the
++	// current SP is not within the previous bounds (the stack may have
++	// changed between calls). We need to update the stack bounds.
+ 	//
+ 	// N.B. we need to update the stack bounds even if SP appears to
+-	// already be in bounds. Our "bounds" may actually be estimated dummy
+-	// bounds (below). The actual stack bounds could have shifted but still
+-	// have partial overlap with our dummy bounds. If we failed to update
+-	// in that case, we could find ourselves seemingly called near the
+-	// bottom of the stack bounds, where we quickly run out of space.
++	// already be in bounds, if our bounds are estimated dummy bounds
++	// (below). We may be in a different region within the same actual
++	// stack bounds, but our estimates were not accurate. Or the actual
++	// stack bounds could have shifted but still have partial overlap with
++	// our dummy bounds. If we failed to update in that case, we could find
++	// ourselves seemingly called near the bottom of the stack bounds, where
++	// we quickly run out of space.
+ 
+ 	// Set the stack bounds to match the current stack. If we don't
+ 	// actually know how big the stack is, like we don't know how big any
+ 	// scheduling stack is, but we assume there's at least 32 kB. If we
+ 	// can get a more accurate stack bound from pthread, use that, provided
+-	// it actually contains SP..
++	// it actually contains SP.
+ 	g0.stack.hi = sp + 1024
+ 	g0.stack.lo = sp - 32*1024
++	mp.g0StackAccurate = false
+ 	if !signal && _cgo_getstackbound != nil {
+ 		// Don't adjust if called from the signal handler.
+ 		// We are on the signal stack, not the pthread stack.
+@@ -280,12 +262,16 @@
+ 		asmcgocall(_cgo_getstackbound, unsafe.Pointer(&bounds))
+ 		// getstackbound is an unsupported no-op on Windows.
+ 		//
++		// On Unix systems, if the API to get accurate stack bounds is
++		// not available, it returns zeros.
++		//
+ 		// Don't use these bounds if they don't contain SP. Perhaps we
+ 		// were called by something not using the standard thread
+ 		// stack.
+ 		if bounds[0] != 0 && sp > bounds[0] && sp <= bounds[1] {
+ 			g0.stack.lo = bounds[0]
+ 			g0.stack.hi = bounds[1]
++			mp.g0StackAccurate = true
+ 		}
+ 	}
+ 	g0.stackguard0 = g0.stack.lo + stackGuard
+@@ -303,6 +289,8 @@
+ 	}
+ 
+ 	sp := gp.m.g0.sched.sp // system sp saved by cgocallback.
++	oldStack := gp.m.g0.stack
++	oldAccurate := gp.m.g0StackAccurate
+ 	callbackUpdateSystemStack(gp.m, sp, false)
+ 
+ 	// The call from C is on gp.m's g0 stack, so we must ensure
+@@ -358,6 +346,12 @@
+ 	reentersyscall(savedpc, uintptr(savedsp))
+ 
+ 	gp.m.syscall = syscall
++
++	// Restore the old g0 stack bounds
++	gp.m.g0.stack = oldStack
++	gp.m.g0.stackguard0 = oldStack.lo + stackGuard
++	gp.m.g0.stackguard1 = gp.m.g0.stackguard0
++	gp.m.g0StackAccurate = oldAccurate
+ }
+ 
+ func cgocallbackg1(fn, frame unsafe.Pointer, ctxt uintptr) {
+Index: src/runtime/proc.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/runtime/proc.go b/src/runtime/proc.go
+--- a/src/runtime/proc.go	(revision 84e4797814312c687ac685a8b6dacc13b93e6392)
++++ b/src/runtime/proc.go	(revision 3674096fb024ab94b6b0b443d681639d85a79033)
+@@ -2446,6 +2446,7 @@
+ 	g0.stack.lo = 0
+ 	g0.stackguard0 = 0
+ 	g0.stackguard1 = 0
++	mp.g0StackAccurate = false
+ 
+ 	putExtraM(mp)
+ 
+Index: src/runtime/runtime2.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
+--- a/src/runtime/runtime2.go	(revision 84e4797814312c687ac685a8b6dacc13b93e6392)
++++ b/src/runtime/runtime2.go	(revision 3674096fb024ab94b6b0b443d681639d85a79033)
+@@ -554,47 +554,48 @@
+ 	_       uint32 // align next field to 8 bytes
+ 
+ 	// Fields not known to debuggers.
+-	procid        uint64            // for debuggers, but offset not hard-coded
+-	gsignal       *g                // signal-handling g
+-	goSigStack    gsignalStack      // Go-allocated signal handling stack
+-	sigmask       sigset            // storage for saved signal mask
+-	tls           [tlsSlots]uintptr // thread-local storage (for x86 extern register)
+-	mstartfn      func()
+-	curg          *g       // current running goroutine
+-	caughtsig     guintptr // goroutine running during fatal signal
+-	p             puintptr // attached p for executing go code (nil if not executing go code)
+-	nextp         puintptr
+-	oldp          puintptr // the p that was attached before executing a syscall
+-	id            int64
+-	mallocing     int32
+-	throwing      throwType
+-	preemptoff    string // if != "", keep curg running on this m
+-	locks         int32
+-	dying         int32
+-	profilehz     int32
+-	spinning      bool // m is out of work and is actively looking for work
+-	blocked       bool // m is blocked on a note
+-	newSigstack   bool // minit on C thread called sigaltstack
+-	printlock     int8
+-	incgo         bool          // m is executing a cgo call
+-	isextra       bool          // m is an extra m
+-	isExtraInC    bool          // m is an extra m that is not executing Go code
+-	isExtraInSig  bool          // m is an extra m in a signal handler
+-	freeWait      atomic.Uint32 // Whether it is safe to free g0 and delete m (one of freeMRef, freeMStack, freeMWait)
+-	needextram    bool
+-	traceback     uint8
+-	ncgocall      uint64        // number of cgo calls in total
+-	ncgo          int32         // number of cgo calls currently in progress
+-	cgoCallersUse atomic.Uint32 // if non-zero, cgoCallers in use temporarily
+-	cgoCallers    *cgoCallers   // cgo traceback if crashing in cgo call
+-	park          note
+-	alllink       *m // on allm
+-	schedlink     muintptr
+-	lockedg       guintptr
+-	createstack   [32]uintptr // stack that created this thread, it's used for StackRecord.Stack0, so it must align with it.
+-	lockedExt     uint32      // tracking for external LockOSThread
+-	lockedInt     uint32      // tracking for internal lockOSThread
+-	nextwaitm     muintptr    // next m waiting for lock
++	procid          uint64            // for debuggers, but offset not hard-coded
++	gsignal         *g                // signal-handling g
++	goSigStack      gsignalStack      // Go-allocated signal handling stack
++	sigmask         sigset            // storage for saved signal mask
++	tls             [tlsSlots]uintptr // thread-local storage (for x86 extern register)
++	mstartfn        func()
++	curg            *g       // current running goroutine
++	caughtsig       guintptr // goroutine running during fatal signal
++	p               puintptr // attached p for executing go code (nil if not executing go code)
++	nextp           puintptr
++	oldp            puintptr // the p that was attached before executing a syscall
++	id              int64
++	mallocing       int32
++	throwing        throwType
++	preemptoff      string // if != "", keep curg running on this m
++	locks           int32
++	dying           int32
++	profilehz       int32
++	spinning        bool // m is out of work and is actively looking for work
++	blocked         bool // m is blocked on a note
++	newSigstack     bool // minit on C thread called sigaltstack
++	printlock       int8
++	incgo           bool          // m is executing a cgo call
++	isextra         bool          // m is an extra m
++	isExtraInC      bool          // m is an extra m that is not executing Go code
++	isExtraInSig    bool          // m is an extra m in a signal handler
++	freeWait        atomic.Uint32 // Whether it is safe to free g0 and delete m (one of freeMRef, freeMStack, freeMWait)
++	needextram      bool
++	g0StackAccurate bool // whether the g0 stack has accurate bounds
++	traceback       uint8
++	ncgocall        uint64        // number of cgo calls in total
++	ncgo            int32         // number of cgo calls currently in progress
++	cgoCallersUse   atomic.Uint32 // if non-zero, cgoCallers in use temporarily
++	cgoCallers      *cgoCallers   // cgo traceback if crashing in cgo call
++	park            note
++	alllink         *m // on allm
++	schedlink       muintptr
++	lockedg         guintptr
++	createstack     [32]uintptr // stack that created this thread, it's used for StackRecord.Stack0, so it must align with it.
++	lockedExt       uint32      // tracking for external LockOSThread
++	lockedInt       uint32      // tracking for internal lockOSThread
++	nextwaitm       muintptr    // next m waiting for lock
+ 
+ 	mLockProfile mLockProfile // fields relating to runtime.lock contention
+ 
