@@ -1,4 +1,4 @@
-ARG go_version=1.22.12
+ARG go_version=1.24.0
 FROM golang:${go_version}-bullseye
 
 LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder
@@ -14,6 +14,6 @@ COPY  patch/*.patch /usr/local/go/
 
 RUN cd /usr/local/go \
     && for patch_file in *.patch; do \
-    patch --verbose -p1 < "/usr/local/go/$patch_file"; \
+    patch --verbose -p1 < "$patch_file"; \
     done \
-    && rm -rf /usr/local/go/*.patch
+    && rm -rf *.patch

@@ -1,7 +1,7 @@
 ARG go_version=1.23.4
 FROM golang:${go_version}-bullseye
 
-LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder/1.22
+LABEL org.opencontainers.image.source=https://github.com/yangjuncode/debian-go-mingw-builder
 
 USER root
 
