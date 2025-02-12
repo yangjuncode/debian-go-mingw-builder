@@ -1,6 +1,6 @@
 #! /bin/bash
 
-go_version=1.23.6
+go_version=1.24.0
 build_no=1
 go_version_build=${go_version}-${build_no}
 
