@@ -1,7 +1,7 @@
 #! /bin/bash
 
 go_version=1.24.0
-build_no=1
+build_no=2
 go_version_build=${go_version}-${build_no}
 
 docker build --progress=plain --build-arg go_version=${go_version} -t ghcr.io/yangjuncode/go:${go_version_build} -f Dockerfile.go .
