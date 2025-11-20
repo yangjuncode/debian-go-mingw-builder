@@ -1,0 +1,29 @@
+From 1bb3bcea9a856a7595dbbb90277a065c8219065e Mon Sep 17 00:00:00 2001
+From: yangjun <290968698@qq.com>
+Date: Fri, 27 Dec 2024 17:10:46 +0800
+Subject: [PATCH] code foramt
+
+---
+ src/runtime/os_windows.go | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/runtime/os_windows.go b/src/runtime/os_windows.go
+index e14e32ac56..564b043fb7 100644
+--- a/src/runtime/os_windows.go
++++ b/src/runtime/os_windows.go
+@@ -154,9 +154,9 @@ var (
+ 
+ var (
+ 	advapi32dll = [...]uint16{'a', 'd', 'v', 'a', 'p', 'i', '3', '2', '.', 'd', 'l', 'l', 0}
+-	ntdlldll            = [...]uint16{'n', 't', 'd', 'l', 'l', '.', 'd', 'l', 'l', 0}
+-	powrprofdll         = [...]uint16{'p', 'o', 'w', 'r', 'p', 'r', 'o', 'f', '.', 'd', 'l', 'l', 0}
+-	winmmdll            = [...]uint16{'w', 'i', 'n', 'm', 'm', '.', 'd', 'l', 'l', 0}
++	ntdlldll    = [...]uint16{'n', 't', 'd', 'l', 'l', '.', 'd', 'l', 'l', 0}
++	powrprofdll = [...]uint16{'p', 'o', 'w', 'r', 'p', 'r', 'o', 'f', '.', 'd', 'l', 'l', 0}
++	winmmdll    = [...]uint16{'w', 'i', 'n', 'm', 'm', '.', 'd', 'l', 'l', 0}
+ )
+ 
+ // Function to be called by windows CreateThread
+-- 
+2.51.0
+
