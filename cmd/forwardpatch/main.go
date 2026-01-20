@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,14 +44,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !branchExists(toBranch) {
-		fmt.Printf("Error: to-branch '%s' does not exist\n", toBranch)
-		os.Exit(1)
-	}
-
 	if !branchExists(baseBranch) {
 		fmt.Printf("Error: base-branch '%s' does not exist\n", baseBranch)
 		os.Exit(1)
+	}
+
+	if !branchExists(toBranch) {
+		fmt.Printf("to-branch '%s' does not exist.\n", toBranch)
+		fmt.Printf("Do you want to create it based on '%s'? [Y/n]: ", baseBranch)
+
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading input: %v\n", err)
+			os.Exit(1)
+		}
+
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response == "" || response == "y" || response == "yes" {
+			// Create the branch
+			cmd := exec.Command("git", "checkout", "-b", toBranch, baseBranch)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				fmt.Printf("Error creating branch '%s': %v\n%s\n", toBranch, err, string(output))
+				os.Exit(1)
+			}
+			fmt.Printf("Created branch '%s' based on '%s'\n", toBranch, baseBranch)
+		} else {
+			fmt.Println("Aborting.")
+			os.Exit(1)
+		}
 	}
 
 	// Find the common ancestor of the from-branch and the base-branch
@@ -109,16 +132,16 @@ func main() {
 
 		if err != nil {
 			// Check if the patch is already applied
-			if strings.Contains(outputStr, "patch does not apply") || 
-			   strings.Contains(outputStr, "patch already applied") || 
-			   strings.Contains(outputStr, "nothing to commit") ||
-			   strings.Contains(outputStr, "nothing new to commit") {
+			if strings.Contains(outputStr, "patch does not apply") ||
+				strings.Contains(outputStr, "patch already applied") ||
+				strings.Contains(outputStr, "nothing to commit") ||
+				strings.Contains(outputStr, "nothing new to commit") {
 				fmt.Printf("  Skipping: Changes already applied in '%s'\n", toBranch)
 				// Abort the cherry-pick
 				abortCmd := exec.Command("git", "cherry-pick", "--abort")
 				abortCmd.Run() // Ignore errors here
 				skipCount++
-			// Check if there's a conflict
+				// Check if there's a conflict
 			} else if strings.Contains(outputStr, "conflict") || strings.Contains(outputStr, "CONFLICT") {
 				fmt.Printf("  Conflict detected. Aborting cherry-pick.\n")
 				// Abort the cherry-pick

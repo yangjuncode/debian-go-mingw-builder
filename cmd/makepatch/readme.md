@@ -13,7 +13,12 @@ makepatch <git-repo-path> <current-branch> <base-branch> <output-directory>
 
 ## Example
 
-makepatch <go-git-repo-path> 1.23.9 release-go-1.23 patch-dir
+export go_repo_dir=/home/yj/github.com/yangjuncode/go
+export current_branch=1.24.12
+export base_branch=release-go-1.24
+export output_directory=/home/yj/github.com/yangjuncode/debian-go-mingw-builder/1.24.12/patch
+
+makepatch $go_repo_dir $current_branch $base_branch $output_directory
 
 ## tech
 

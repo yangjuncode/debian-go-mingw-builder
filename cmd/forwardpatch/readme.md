@@ -14,7 +14,12 @@ forwardpatch <git-repo-path>  <from-branch> <to-branch> <base-branch>
 
 ## Example
 
-forwardpatch <go-git-repo-path> 1.23.8 1.23.9 release-go-1.23
+export go_repo_dir=/home/yj/github.com/yangjuncode/go
+export from_branch=1.24.10
+export to_branch=1.24.12
+export base_branch=release-go-1.24
+
+forwardpatch $go_repo_dir $from_branch $to_branch $base_branch
 
 ## Tech
 
