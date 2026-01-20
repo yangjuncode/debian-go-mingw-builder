@@ -1,4 +1,6 @@
 #! /bin/bash
+set -e
+export DOCKER_BUILDKIT=1
 
 go_version=1.24.12
 build_no=1
