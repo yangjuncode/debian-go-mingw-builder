@@ -1,0 +1,55 @@
+From 6727e98d9a55e2c1fce1def2b434341bab66cce5 Mon Sep 17 00:00:00 2001
+From: yangjun <290968698@qq.com>
+Date: Mon, 30 Dec 2024 13:42:44 +0800
+Subject: [PATCH] add rtlGetNtVersionNumbers
+
+---
+ src/syscall/syscall_windows.go  | 1 +
+ src/syscall/zsyscall_windows.go | 7 +++++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/src/syscall/syscall_windows.go b/src/syscall/syscall_windows.go
+index 1c5a67778f..cd52791904 100644
+--- a/src/syscall/syscall_windows.go
++++ b/src/syscall/syscall_windows.go
+@@ -233,6 +233,7 @@ func NewCallbackCDecl(fn any) uintptr {
+ //sys	FreeLibrary(handle Handle) (err error)
+ //sys	GetProcAddress(module Handle, procname string) (proc uintptr, err error)
+ //sys	GetVersion() (ver uint32, err error)
++//sys	rtlGetNtVersionNumbers(majorVersion *uint32, minorVersion *uint32, buildNumber *uint32) = ntdll.RtlGetNtVersionNumbers
+ //sys	formatMessage(flags uint32, msgsrc uintptr, msgid uint32, langid uint32, buf []uint16, args *byte) (n uint32, err error) = FormatMessageW
+ //sys	ExitProcess(exitcode uint32)
+ //sys	createFile(name *uint16, access uint32, mode uint32, sa *SecurityAttributes, createmode uint32, attrs uint32, templatefile int32) (handle Handle, err error) [failretval == InvalidHandle || e1 == ERROR_ALREADY_EXISTS ] = CreateFileW
+diff --git a/src/syscall/zsyscall_windows.go b/src/syscall/zsyscall_windows.go
+index a58de3412c..4fb023e243 100644
+--- a/src/syscall/zsyscall_windows.go
++++ b/src/syscall/zsyscall_windows.go
+@@ -47,6 +47,7 @@ var (
+ 	modshell32  = NewLazyDLL(sysdll.Add("shell32.dll"))
+ 	moduserenv  = NewLazyDLL(sysdll.Add("userenv.dll"))
+ 	modws2_32   = NewLazyDLL(sysdll.Add("ws2_32.dll"))
++	modntdll    = NewLazyDLL(sysdll.Add("ntdll.dll"))
+ 
+ 	procConvertSidToStringSidW             = modadvapi32.NewProc("ConvertSidToStringSidW")
+ 	procConvertStringSidToSidW             = modadvapi32.NewProc("ConvertStringSidToSidW")
+@@ -196,6 +197,7 @@ var (
+ 	procsetsockopt                         = modws2_32.NewProc("setsockopt")
+ 	procshutdown                           = modws2_32.NewProc("shutdown")
+ 	procsocket                             = modws2_32.NewProc("socket")
++	procRtlGetNtVersionNumbers			   = modntdll.NewProc("RtlGetNtVersionNumbers")
+ )
+ 
+ func ConvertSidToStringSid(sid *SID, stringSid **uint16) (err error) {
+@@ -1475,3 +1477,8 @@ func socket(af int32, typ int32, protocol int32) (handle Handle, err error) {
+ 	}
+ 	return
+ }
++
++func rtlGetNtVersionNumbers(majorVersion *uint32, minorVersion *uint32, buildNumber *uint32) {
++	Syscall(procRtlGetNtVersionNumbers.Addr(), 3, uintptr(unsafe.Pointer(majorVersion)), uintptr(unsafe.Pointer(minorVersion)), uintptr(unsafe.Pointer(buildNumber)))
++	return
++}
+\ No newline at end of file
+-- 
+2.52.0
+
