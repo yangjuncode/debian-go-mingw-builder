@@ -10,7 +10,7 @@ ARG cmake_version=3.31.10
 
 RUN set -o xtrace \
     && apt-get update \
-    && apt-get -y --allow-unauthenticated install ninja-build g++-mingw-w64-i686-posix  \
+    && apt-get -y --allow-unauthenticated install ninja-build meson g++-mingw-w64-i686-posix  \
     gcc-mingw-w64-i686-posix g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix
 
 RUN wget https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-linux-x86_64.tar.gz \
@@ -18,5 +18,6 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cm
     && rm -rf /usr/local/cmake-${cmake_version}-linux-x86_64/doc/ \
     && rm -rf /usr/local/cmake-${cmake_version}-linux-x86_64/man/ \   
     && rm cmake-${cmake_version}-linux-x86_64.tar.gz
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="$PATH:/usr/local/cmake-${cmake_version}-linux-x86_64/bin"
